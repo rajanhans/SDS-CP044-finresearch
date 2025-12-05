@@ -3,7 +3,7 @@ Reporting Agent - Synthesis & Formatting
 Creates comprehensive financial research reports from agent findings.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 from openai import OpenAI
 from config.settings import get_settings
@@ -168,7 +168,6 @@ Keep it professional and concise.
         stock_data = analysis.get('stock_data', {})
         valuation = analysis.get('valuation_analysis', {})
         health = analysis.get('health_analysis', {})
-        growth = analysis.get('growth_analysis', {})
         risk = analysis.get('risk_analysis', {})
 
         indicators = f"""### Price Performance

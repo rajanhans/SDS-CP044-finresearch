@@ -3,7 +3,7 @@ Financial Analyst Agent - Quantitative Analysis & Ratios
 Fetches financial data and computes key metrics and ratios.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from openai import OpenAI
 from config.settings import get_settings
 from utils.api_clients import FinancialAPIClient
@@ -191,7 +191,7 @@ class FinancialAnalystAgent:
         price_changes = data.get('price_changes', {})
 
         # Growth category
-        growth_category = 'Unknown'
+
         avg_growth = (revenue_growth + earnings_growth) / 2 if revenue_growth and earnings_growth else 0
         if avg_growth > 0.20:
             growth_category = 'High growth'
@@ -204,7 +204,7 @@ class FinancialAnalystAgent:
 
         # Price momentum
         year_change = price_changes.get('1_year', 0)
-        momentum = 'Unknown'
+
         if year_change > 20:
             momentum = 'Strong upward momentum'
         elif year_change > 0:

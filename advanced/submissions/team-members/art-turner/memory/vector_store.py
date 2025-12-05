@@ -32,16 +32,23 @@ class VectorStore:
         )
 
         # Use sentence-transformers embedding function to avoid ONNX issues
-        embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
 
-        # Get or create collection with custom embedding function
-        self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"description": "Financial research agent findings"},
-            embedding_function=embedding_fn
-        )
+        # Check if collection exists to avoid embedding function conflicts
+        try:
+            # Try to get existing collection first
+            self.collection = self.client.get_collection(
+                name=self.collection_name
+            )
+        except Exception:
+            # Collection doesn't exist, create it with embedding function
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"description": "Financial research agent findings"},
+                embedding_function=self.embedding_fn
+            )
 
     def add_document(
         self,
@@ -201,9 +208,10 @@ class VectorStore:
     def clear_all(self) -> None:
         """Clear all documents from the vector store."""
         self.client.delete_collection(name=self.collection_name)
-        self.collection = self.client.get_or_create_collection(
+        self.collection = self.client.create_collection(
             name=self.collection_name,
-            metadata={"description": "Financial research agent findings"}
+            metadata={"description": "Financial research agent findings"},
+            embedding_function=self.embedding_fn
         )
 
     def get_context(self, ticker: str, agent: Optional[str] = None) -> str:

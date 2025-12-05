@@ -2,11 +2,10 @@
 API Client utilities for financial data and web search.
 """
 
-import os
-from typing import List, Dict, Any, Optional
+
+from typing import List, Dict, Any
 import yfinance as yf
-import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from config.settings import get_settings
 
 

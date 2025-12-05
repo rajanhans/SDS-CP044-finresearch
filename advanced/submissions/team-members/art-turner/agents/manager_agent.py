@@ -3,7 +3,7 @@ Manager Agent - Multi-Agent Orchestration
 Coordinates all worker agents and manages the research workflow.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from config.settings import get_settings
 from memory.vector_store import VectorStore
