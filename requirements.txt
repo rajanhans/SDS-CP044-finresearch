@@ -1,11 +1,27 @@
-# Core Agent Framework
-crewai==0.80.0
-langchain_openai
+# LangChain and LangGraph
+langchain==0.1.0
+langchain-community==0.0.13
+langchain-openai==0.0.5
+langchain-pinecone
+langchain-tavily
+langgraph==0.0.20
 
-# Tools & APIs
-yfinance              # For stock data
-duckduckgo-search     # Free search tool (good for demos vs. paid Tavily)
-python-dotenv         # For managing API keys
+# Vector Database
+pinecone-client
 
-# Utilities
-ipykernel             # If you want to run this in notebooks later
+# APIs
+openai==1.7.0
+tavily-python==0.3.0
+financialdatasets==0.1.0
+yfinance
+
+# Data Models
+pydantic==2.5.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+hypothesis==6.92.0
