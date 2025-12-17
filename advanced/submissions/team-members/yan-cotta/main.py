@@ -16,42 +16,17 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.config.settings import get_settings
-from src.crew import FinResearchCrew, SequentialFinResearchCrew
+from src.config.settings import get_settings, setup_logging
+from src.crew import FinResearchCrew, SequentialFinResearchCrew, CrewExecutionResult
 from src.tools.memory import MemoryTool
 
 
-def setup_logging(level: str = "INFO", log_file: str = None) -> None:
-    """
-    Configure application logging.
-    
-    Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR)
-        log_file: Optional file path for logging output
-    """
-    log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-    date_format = "%Y-%m-%d %H:%M:%S"
-    
-    handlers = [logging.StreamHandler(sys.stdout)]
-    
-    if log_file:
-        handlers.append(logging.FileHandler(log_file))
-    
-    logging.basicConfig(
-        level=getattr(logging, level.upper()),
-        format=log_format,
-        datefmt=date_format,
-        handlers=handlers
-    )
-    
-    # Reduce noise from third-party libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("chromadb").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 def validate_environment() -> bool:
@@ -136,7 +111,7 @@ Examples:
         "-o", "--output",
         type=str,
         default=None,
-        help="Output filename for the report (default: auto-generated)"
+        help="Output filename for the report (default: {TICKER}_report.md)"
     )
     
     parser.add_argument(
@@ -184,10 +159,16 @@ Examples:
         help="Clear ChromaDB memory before starting (prevents context pollution)"
     )
     
+    parser.add_argument(
+        "--json-output",
+        action="store_true",
+        help="Output execution result as JSON (for UI integration)"
+    )
+    
     return parser
 
 
-def run_research(args: argparse.Namespace) -> int:
+def run_research(args: argparse.Namespace) -> tuple[int, Optional[CrewExecutionResult]]:
     """
     Execute the research workflow.
     
@@ -195,28 +176,39 @@ def run_research(args: argparse.Namespace) -> int:
         args: Parsed command-line arguments
         
     Returns:
-        Exit code (0 for success, 1 for failure)
+        Tuple of (exit_code, execution_result)
     """
-    logger = logging.getLogger(__name__)
-    
     ticker = args.ticker.strip().upper()
     company_name = args.name or ticker
+    settings = get_settings()
+    
+    # Use consistent output filename
+    output_filename = args.output or f"{ticker}_report.md"
     
     if not args.quiet:
-        print(f"\nStarting research for: {company_name} ({ticker})")
+        print(f"\n{'='*60}")
+        print(f"FINRESEARCH AI - Starting Research")
+        print(f"{'='*60}")
+        print(f"   Ticker: {ticker}")
+        print(f"   Company: {company_name}")
         print(f"   Process: {'Sequential' if args.sequential else 'Hierarchical'}")
+        print(f"   Output: {settings.output_path / output_filename}")
         print(f"   Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("-" * 60)
+        print(f"{'='*60}\n")
+    
+    logger.info(f"Starting research workflow for {ticker}")
     
     try:
         # Create appropriate crew type
         if args.sequential:
+            logger.info("Using Sequential process mode")
             crew = SequentialFinResearchCrew(
                 ticker=ticker,
                 company_name=company_name,
                 verbose=args.verbose
             )
         else:
+            logger.info("Using Hierarchical process mode (Manager-led)")
             crew = FinResearchCrew(
                 ticker=ticker,
                 company_name=company_name,
@@ -224,32 +216,50 @@ def run_research(args: argparse.Namespace) -> int:
             )
         
         # Execute research
+        logger.info("Executing crew workflow...")
         result = crew.run()
         
-        # Save report
-        report_path = crew.save_report(result, filename=args.output)
+        # Save report to outputs/ directory
+        report_path = crew.save_report(result, filename=output_filename)
+        
+        # Get execution result for potential JSON output
+        execution_result = crew.get_execution_result()
         
         if not args.quiet:
             print("\n" + "=" * 60)
             print("RESEARCH COMPLETE")
             print("=" * 60)
             print(f"\nReport saved to: {report_path}")
+            
+            # Show validation status
+            if execution_result:
+                if execution_result.report_valid:
+                    print("[✓] Report passed quality validation")
+                else:
+                    print("[!] Report has validation issues:")
+                    for issue in execution_result.validation_issues:
+                        print(f"    - {issue}")
+                
+                if execution_result.duration_seconds:
+                    print(f"\nExecution time: {execution_result.duration_seconds:.1f} seconds")
+            
             print("\n--- REPORT PREVIEW ---\n")
             print(result[:2000])
             if len(result) > 2000:
                 print("\n... [truncated, see full report] ...")
         
-        return 0
+        logger.info(f"Research completed successfully for {ticker}")
+        return (0, execution_result)
         
     except KeyboardInterrupt:
         logger.warning("Research interrupted by user")
         print("\n\nResearch interrupted by user")
-        return 1
+        return (1, None)
         
     except Exception as e:
         logger.exception(f"Research failed for {ticker}")
         print(f"\nERROR: {type(e).__name__}: {e}")
-        return 1
+        return (1, None)
 
 
 def reset_memory(quiet: bool = False) -> bool:
@@ -262,14 +272,13 @@ def reset_memory(quiet: bool = False) -> bool:
     Returns:
         True if reset successful, False otherwise
     """
-    logger = logging.getLogger(__name__)
-    
     try:
         memory_tool = MemoryTool()
         
         if memory_tool._collection is None:
             if not quiet:
                 print("[WARNING] Memory system not available. Nothing to reset.")
+            logger.warning("Memory system not available for reset")
             return True
         
         result = memory_tool._clear()
@@ -297,11 +306,16 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
     
-    # Setup logging
+    # Setup logging with chain-of-thought support
+    log_level = "DEBUG" if args.verbose else args.log_level
     setup_logging(
-        level="DEBUG" if args.verbose else args.log_level,
-        log_file=args.log_file
+        level=log_level,
+        log_file=args.log_file,
+        log_chain_of_thought=args.verbose
     )
+    
+    logger.info("FinResearch AI starting up")
+    logger.debug(f"Arguments: {args}")
     
     # Print banner
     if not args.quiet:
@@ -326,11 +340,20 @@ def main() -> int:
     
     # Dry run - just validate
     if args.dry_run:
+        logger.info("Dry run completed - configuration valid")
         print("Configuration valid. Dry run complete.")
         return 0
     
     # Run research
-    return run_research(args)
+    exit_code, execution_result = run_research(args)
+    
+    # Output JSON if requested (for UI integration)
+    if args.json_output and execution_result:
+        import json
+        print("\n--- JSON OUTPUT ---")
+        print(json.dumps(execution_result.to_dict(), indent=2, default=str))
+    
+    return exit_code
 
 
 if __name__ == "__main__":
