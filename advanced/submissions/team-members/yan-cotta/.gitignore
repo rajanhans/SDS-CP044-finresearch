@@ -1,0 +1,68 @@
+# =============================================================================
+# Git Ignore File for FinResearch AI
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+bin/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Local development
+.env
+.env.local
+.env.*.local
+
+# ChromaDB local storage
+.chroma_db/
+
+# Generated outputs (keep directory, ignore files)
+outputs/*.md
+outputs/*.json
+!outputs/.gitkeep
+
+# Old reports directory (deprecated)
+reports/
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.bak
+.DS_Store
+Thumbs.db
