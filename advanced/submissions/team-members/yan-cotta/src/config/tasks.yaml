@@ -3,6 +3,7 @@
 
 # Task for the Researcher Agent
 research_task:
+  async_execution: true  # Run in parallel with analysis_task
   description: >
     Conduct comprehensive qualitative research on {ticker} ({company_name}).
     
@@ -37,6 +38,7 @@ research_task:
 
 # Task for the Analyst Agent
 analysis_task:
+  async_execution: true  # Run in parallel with research_task
   description: >
     Perform quantitative financial analysis for {ticker} ({company_name}).
     
