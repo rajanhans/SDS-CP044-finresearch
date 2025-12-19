@@ -5,16 +5,18 @@ FinResearch AI - Full Integration Verification Script
 This script runs a complete end-to-end test of the FinResearch AI system,
 validating that:
 1. All agents are created successfully
-2. The crew executes the hierarchical workflow
+2. The crew executes the hierarchical workflow with parallel tasks
 3. Findings are saved to and retrieved from ChromaDB
 4. The final report is generated with all required sections
 5. The report is saved to outputs/{TICKER}_report.md
+6. Interactive mode components work correctly
 
 Usage:
     python verify_full_run.py                    # Test with NVDA
     python verify_full_run.py --ticker AAPL      # Test with custom ticker
     python verify_full_run.py --dry-run          # Validate setup only
     python verify_full_run.py --mock             # Run with mock data (no API calls)
+    python verify_full_run.py --test-interactive # Test interactive mode parsing
 """
 
 import argparse
@@ -268,12 +270,118 @@ def verify_report_structure(content: str) -> Tuple[bool, List[str]]:
     return len(missing) == 0, missing
 
 
+def verify_parallel_config() -> Tuple[bool, str]:
+    """Verify parallel execution is properly configured in tasks.yaml."""
+    import yaml
+    from src.config.settings import TASKS_CONFIG_PATH
+    
+    try:
+        with open(TASKS_CONFIG_PATH) as f:
+            tasks = yaml.safe_load(f)
+        
+        research_async = tasks.get('research_task', {}).get('async_execution', False)
+        analysis_async = tasks.get('analysis_task', {}).get('async_execution', False)
+        
+        if research_async and analysis_async:
+            return True, "Parallel execution enabled for research and analysis tasks"
+        elif research_async or analysis_async:
+            return False, "Only one task has async_execution enabled"
+        else:
+            return False, "async_execution not enabled in tasks.yaml"
+    except Exception as e:
+        return False, f"Failed to verify parallel config: {e}"
+
+
+def verify_interactive_mode_parsing() -> Tuple[bool, List[str]]:
+    """Verify interactive mode query parsing works correctly."""
+    from main import parse_interactive_query
+    
+    issues = []
+    
+    # Test cases: (query, current_ticker, expected_action)
+    test_cases = [
+        # Exit commands
+        ("exit", None, "exit"),
+        ("quit", None, "exit"),
+        ("q", None, "exit"),
+        
+        # Help commands
+        ("help", None, "help"),
+        ("?", None, "help"),
+        
+        # Status commands
+        ("status", None, "status"),
+        ("session", None, "status"),
+        
+        # Clear commands
+        ("clear", None, "clear"),
+        ("reset", None, "clear"),
+        
+        # Research commands
+        ("AAPL", None, "research"),
+        ("research TSLA", None, "research"),
+        ("analyze MSFT", None, "research"),
+        ("look up GOOGL", None, "research"),
+        
+        # Context commands
+        ("context AAPL", None, "context"),
+        ("context", "AAPL", "context"),
+        
+        # Follow-up queries (with context)
+        ("more details", "AAPL", "followup"),
+        ("what about risks", "TSLA", "followup"),
+    ]
+    
+    for query, current_ticker, expected_action in test_cases:
+        ticker, company, action = parse_interactive_query(query, current_ticker)
+        if action != expected_action:
+            issues.append(f"Query '{query}': expected '{expected_action}', got '{action}'")
+    
+    return len(issues) == 0, issues
+
+
+def verify_conversation_context() -> Tuple[bool, str]:
+    """Verify ConversationContext class works correctly."""
+    from main import ConversationContext
+    
+    try:
+        ctx = ConversationContext()
+        
+        # Test ticker management
+        ctx.current_ticker = "AAPL"
+        if ctx.current_ticker != "AAPL":
+            return False, "Ticker setter not working"
+        
+        # Test history tracking
+        ctx.add_to_history(
+            query="research AAPL",
+            response_summary="Generated report",
+            ticker="AAPL",
+            success=True
+        )
+        
+        summary = ctx.get_session_summary()
+        if "AAPL" not in summary or "1" not in summary:
+            return False, "Session summary not tracking history"
+        
+        # Test clear
+        ctx.clear_session()
+        if ctx.current_ticker is not None:
+            return False, "Clear session didn't reset ticker"
+        
+        return True, "ConversationContext operational"
+        
+    except Exception as e:
+        return False, f"ConversationContext error: {e}"
+
+
 def run_full_verification(
     ticker: str = "NVDA",
     company_name: Optional[str] = None,
     dry_run: bool = False,
     mock: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    test_interactive: bool = False
 ) -> VerificationResult:
     """
     Run full end-to-end verification.
@@ -284,6 +392,7 @@ def run_full_verification(
         dry_run: If True, only verify setup without running crew
         mock: If True, use mock data instead of API calls
         verbose: Enable verbose output
+        test_interactive: If True, also test interactive mode components
         
     Returns:
         VerificationResult with all step outcomes
@@ -351,6 +460,25 @@ def run_full_verification(
         result.error = msg
         return result
     
+    # Step 7: Verify parallel execution config
+    logger.info("Step 7: Verifying parallel execution config...")
+    passed, msg = verify_parallel_config()
+    result.add_step("Parallel Config", passed, msg)
+    # Don't fail on this - parallel is optional
+    
+    # Step 8: Verify interactive mode (if requested)
+    if test_interactive:
+        logger.info("Step 8: Verifying interactive mode parsing...")
+        passed, issues = verify_interactive_mode_parsing()
+        if passed:
+            result.add_step("Interactive Parsing", True, "All query parsing tests passed")
+        else:
+            result.add_step("Interactive Parsing", False, f"Failed tests: {issues}")
+        
+        logger.info("Step 9: Verifying conversation context...")
+        passed, msg = verify_conversation_context()
+        result.add_step("Conversation Context", passed, msg)
+    
     # If dry run, stop here
     if dry_run:
         logger.info("Dry run complete - skipping crew execution")
@@ -361,8 +489,8 @@ def run_full_verification(
         result.total_duration_seconds = time.time() - start_time
         return result
     
-    # Step 7: Run crew execution
-    logger.info("Step 7: Running crew execution...")
+    # Step 10: Run crew execution
+    logger.info("Step 10: Running crew execution...")
     
     try:
         from src.crew import FinResearchCrew
@@ -387,8 +515,8 @@ def run_full_verification(
             crew_duration
         )
         
-        # Step 8: Save report
-        logger.info("Step 8: Saving report...")
+        # Step 11: Save report
+        logger.info("Step 11: Saving report...")
         report_filename = f"{ticker}_report.md"
         report_path = crew.save_report(report_content, filename=report_filename)
         
@@ -406,8 +534,8 @@ def run_full_verification(
             result.error = "Report not generated"
             return result
         
-        # Step 9: Validate report structure
-        logger.info("Step 9: Validating report structure...")
+        # Step 12: Validate report structure
+        logger.info("Step 12: Validating report structure...")
         valid, missing_sections = verify_report_structure(report_content)
         
         if valid:
@@ -485,6 +613,12 @@ def main() -> int:
         help="Output results as JSON"
     )
     
+    parser.add_argument(
+        "--test-interactive",
+        action="store_true",
+        help="Also test interactive mode components"
+    )
+    
     args = parser.parse_args()
     
     print("""
@@ -499,7 +633,8 @@ def main() -> int:
         company_name=args.name,
         dry_run=args.dry_run,
         mock=args.mock,
-        verbose=args.verbose
+        verbose=args.verbose,
+        test_interactive=args.test_interactive
     )
     
     # Output results
