@@ -8,12 +8,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.graph import create_graph
 
 def main():
-    parser = argparse.ArgumentParser(description="FinResearch AI - Week 1")
+    parser = argparse.ArgumentParser(description="FinResearch AI")
     parser.add_argument("--ticker", type=str, required=True, help="Stock ticker to research (e.g. AAPL)")
     args = parser.parse_args()
     
     ticker = args.ticker
-    print(f"Starting FinResearch AI for {ticker}...")
     
     app = create_graph()
     
@@ -26,11 +25,9 @@ def main():
     }
     
     # Run the graph
-    print(f"--- Starting Financial Research for {ticker} ---")
     final_state = {}
     for output in app.stream(initial_state):
         for key, value in output.items():
-            print(f"Finished Node: {key}")
             # The streaming output contains the state update from that node
             # We want to capture the accumulated state, which isn't directly returned in simple stream mode
             # But the value returned IS the update. 
@@ -40,15 +37,10 @@ def main():
             if "final_report" in value:
                 final_state.update(value)
 
-    print("--- Graph Execution Completed ---")
     
     # Print Final Report
     final_report = final_state.get("final_report", "No report generated. check logs.")
-    print("\n" + "="*50)
-    print(f"FINAL REPORT FOR {ticker}")
-    print("="*50 + "\n")
     print(final_report)
-    print("\n" + "="*50)
 
 if __name__ == "__main__":
     main()

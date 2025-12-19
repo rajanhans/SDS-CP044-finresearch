@@ -1,3 +1,10 @@
+"""
+This module contains the ReportingAgent, which is responsible for synthesizing the final
+analysis into a readable Markdown report and generating structured data for UI visualizations.
+"""
+
+import json
+import re
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -5,64 +12,72 @@ from ..memory import VectorMemory
 from ..state import AgentState
 
 class ReportingAgent:
+    """
+    Generates the final financial report and data for charts.
+    """
     def __init__(self):
         self.memory = VectorMemory()
-        self.llm = ChatOpenAI(model="gpt-5-nano")
+        self.llm = ChatOpenAI(model="gpt-4o-mini")
 
     def run(self, state: AgentState):
         """
-        Reporting Agent Node logic.
-        Synthesizes all gathered data into a final markdown report.
+        Executes the reporting phase:
+        1. Fetches all relevant context from memory.
+        2. Prompts the LLM to write a MD report and JSON data.
+        3. Extracts JSON for the frontend.
         """
-        print("--- Reporting Agent ---")
+        print("--- Reporting Agent: Synthesizing Output ---")
         ticker = state.get("ticker")
+        mode = state.get("investor_mode", "Neutral")
         
-        # 1. Retrieve all context from Shared Memory
-        print(f"Retrieving context for {ticker}...")
-        # detailed query to get both types of docs
-        results = self.memory.similarity_search(f"financial analysis and market news for {ticker}", k=10)
+        # 1. Retrieve Context
+        results = self.memory.similarity_search(f"Analyst Verdict and full research for {ticker}", k=10)
         
         context_text = ""
         for doc in results:
             source = doc.metadata.get("source", "unknown")
             context_text += f"-- Source: {source} --\n{doc.page_content}\n\n"
             
+        # 2. Generate Report & Graph Data
+        system_prompt = """You are a professional Financial Reporter.
+        Based on the provided research context (especially the Analyst Verdict) for {ticker} ({mode} mode).
         
-        mode = state.get("investor_mode", "Neutral")
-        print(f"Generating final report in '{mode}' mode...")
+        Task 1: Write a professional Markdown Report.
+        Structure:
+        # Financial Report: {ticker}
+        ## 1. Executive Summary (≤150 words)
+        ## 2. Analyst Verdict (Score & Rec)
+        ## 3. Company Snapshot
+        ## 4. Key Financial Indicators 
+        ## 5. Technical Signals
+        ## 6. Recent News & Sentiment
+        ## 7. Risks & Opportunities
+        ## 8. Final Perspective
         
-        system_prompt = f"""You are a professional financial reporter. 
-        Your goal is to write a comprehensive financial report for {{ticker}} based on the provided gathered context.
-        
-        **TONE INSTRUCTION**: The user has requested a **{mode}** perspective. 
-        - If 'Bullish': Highlight growth potential, strengths, and upside opportunities.
-        - If 'Bearish': Focus on risks, valuation concerns, and competitive threats.
-        - If 'Neutral': Maintain a balanced, objective view.
-        
-        The report must follow this exact Markdown structure:
-        
-        # Financial Report: {{ticker}}
-        
-        ## 1. Executive Summary
-        (A concise 150-word overview of the company's current status and outlook)
-        
-        ## 2. Company Snapshot
-        (Brief description of sector, market position, and key competitors)
-        
-        ## 3. Key Financial Indicators
-        (Highlight P/E, Market Cap, Price trends, and other metrics found in the context)
-        
-        ## 4. Recent News & Sentiment
-        (Summarize key events and overall market sentiment)
-        
-        ## 5. Risks & Opportunities
-        (Bull case vs Bear case)
-        
-        ## 6. Final Perspective
-        (A concluding statement reflecting the {mode} view)
-        
-        If some information is missing in the context, state that it was not available.
-        Do not make up numbers.
+        Task 2: Generate JSON Data for Visualization.
+        At the VERY END of your response, strictly inside a single ```json``` block, provide data for the UI.
+        Structure:
+        ```json
+        {{
+            "metrics": [
+                {{ "Metric": "Market Cap", "Value": "2.5T" }},
+                {{ "Metric": "P/E Ratio", "Value": "35.5" }},
+                {{ "Metric": "Revenue Growth", "Value": "+15%" }},
+                {{ "Metric": "Profit Margin", "Value": "25%" }}
+            ], # STRICTLY PROVIDE TOP 4 METRICS ONLY
+            "chart": {{
+                "type": "radar",
+                "title": "Financial Health Radar",
+                "data": {{
+                    "Valuation": 7,
+                    "Growth": 6,
+                    "Profitability": 8,
+                    "Price Action": 5,
+                    "Sentiment": 9
+                }}
+            }}
+        }}
+        ```
         """
         
         prompt = ChatPromptTemplate.from_messages([
@@ -71,14 +86,25 @@ class ReportingAgent:
         ])
         
         chain = prompt | self.llm
-        report = chain.invoke({"ticker": ticker, "context": context_text})
-        report_content = report.content
+        full_output = chain.invoke({"ticker": ticker, "mode": mode, "context": context_text}).content
         
-        print("Report generation complete.")
+        # 3. Extract JSON Graph Data
+        graph_data = {}
+        json_match = re.search(r"```json\n(.*?)\n```", full_output, re.DOTALL)
+        if json_match:
+            try:
+                graph_data = json.loads(json_match.group(1))
+                # Remove the JSON block from the readable report
+                report_content = full_output.replace(json_match.group(0), "").strip()
+            except Exception as e:
+                print(f"Failed to parse graph JSON: {e}")
+                report_content = full_output
+        else:
+            report_content = full_output
         
-        # 3. Update State
         return {
             "final_report": report_content,
+            "financial_data": graph_data,
             "messages": [HumanMessage(content=f"Report generated for {ticker}.")]
         }
 

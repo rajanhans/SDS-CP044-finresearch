@@ -21,6 +21,7 @@ langgraph>=0.2.0          # For advanced stateful multi-agent workflows
 langchain-pinecone        # For Vector Memory
 langchain-tavily          # For Search
 gradio                    # For Web UI
+plotly>=5.0.0             # For Advanced Visualizations
 
 # -----------------------------------------------------------------------------
 # FINANCIAL DATA & TOOLS

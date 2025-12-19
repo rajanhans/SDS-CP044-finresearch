@@ -18,6 +18,9 @@ python-dotenv = "*"
 pytest = "*"
 pytest-asyncio = "*"
 gradio = "*"
+tradingview-ta = "*"
+pandas = "*"
+plotly = "*"
 
 [dev-packages]
 
