@@ -5,8 +5,6 @@ This module contains the TradingViewAgent, which retrieves technical analysis in
 
 import json
 from tradingview_ta import TA_Handler, Interval
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.documents import Document
 from ...memory import VectorMemory
@@ -15,14 +13,14 @@ from ...state import AgentState
 class TradingViewAgent:
     """
     Retrieves and analyzes technical indicators using TradingView TA.
+    Optimized: No longer uses LLM for self-summary; passes raw JSON to Analyst.
     """
     def __init__(self):
         self.memory = VectorMemory()
-        self.llm = ChatOpenAI(model="gpt-4o-mini")
 
     def run(self, state: AgentState):
         """
-        Executes technical analysis retrieval, interpretation, and storage.
+        Executes technical analysis retrieval and storage.
         """
         ticker = state.get("ticker")
         
@@ -71,37 +69,14 @@ class TradingViewAgent:
             except Exception:
                 technicals_json = "{}"
 
-        # 2. Analyze with LLM
-        system_prompt = """You are a Technical Analyst.
-        Review the TradingView technical indicators for {ticker}.
-        
-        Provide a brief analysis of:
-        1. Momentum (RSI, MACD).
-        2. Trend (Moving Averages).
-        3. Overall Technical Signal (Buy/Sell).
-        
-        Be precise about the signals.
-        """
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", "Technical Data:\n{data}")
-        ])
-        
-        chain = prompt | self.llm
-        analysis_text = chain.invoke({"ticker": ticker, "data": technicals_json})
-        
-        # 3. Store in Pinecone
+        # 2. Store in Pinecone
         doc_raw = Document(
             page_content=f"Raw Technicals:\n{technicals_json}",
             metadata={"source": "TradingView_Technicals", "ticker": ticker, "type": "raw_technicals"}
         )
-        doc_analysis = Document(
-            page_content=analysis_text.content,
-            metadata={"source": "TradingView_Analysis", "ticker": ticker, "type": "technical_analysis"}
-        )
         
-        self.memory.add_documents([doc_raw, doc_analysis], source="TradingView")
+        # We no longer store "TradingView_Analysis" as it was redundant
+        self.memory.add_documents([doc_raw], source="TradingView")
         
         return {
             "messages": [HumanMessage(content=f"TradingView Agent finished research for {ticker}.")]

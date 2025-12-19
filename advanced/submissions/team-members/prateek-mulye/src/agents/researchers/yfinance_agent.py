@@ -5,8 +5,6 @@ This module contains the YFinanceAgent, which retrieves fundamental financial da
 
 import yfinance as yf
 import json
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.documents import Document
 from ...memory import VectorMemory
@@ -15,14 +13,14 @@ from ...state import AgentState
 class YFinanceAgent:
     """
     Retrieves and analyzes fundamental stock data using YFinance.
+    Optimized: No longer uses LLM for self-summary; passes raw JSON to Analyst.
     """
     def __init__(self):
         self.memory = VectorMemory()
-        self.llm = ChatOpenAI(model="gpt-4o-mini")
 
     def run(self, state: AgentState):
         """
-        Executes data retrieval, commentary generation, and storage.
+        Executes data retrieval and storage.
         """
         ticker = state.get("ticker")
         
@@ -49,37 +47,15 @@ class YFinanceAgent:
             print(f"YFinance fetch failed: {e}")
             metrics_json = "{}"
 
-        # 2. Analyze with LLM (Data Commentary)
-        system_prompt = """You are a Fundamental Data Researcher.
-        Review the raw financial metrics for {ticker}.
-        
-        Provide a brief commentary on:
-        1. Valuation (expensive/cheap based on P/E).
-        2. Price position relative to 52-week range.
-        3. Analyst consensus (target price vs current).
-        
-        Do not give a buy/sell recommendation, just interpret the data.
-        """
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", "Financial Data:\n{data}")
-        ])
-        
-        chain = prompt | self.llm
-        analysis = chain.invoke({"ticker": ticker, "data": metrics_json})
-        
-        # 3. Store in Pinecone
+        # 2. Store in Pinecone
+        # Store raw data for Analyst to use precisely
         doc_raw = Document(
             page_content=f"Raw Financial Metrics:\n{metrics_json}",
             metadata={"source": "YFinance_Data", "ticker": ticker, "type": "raw_metrics"}
         )
-        doc_analysis = Document(
-            page_content=analysis.content,
-            metadata={"source": "YFinance_Commentary", "ticker": ticker, "type": "data_analysis"}
-        )
         
-        self.memory.add_documents([doc_raw, doc_analysis], source="YFinance")
+        # We no longer store "YFinance_Commentary" as it was redundant
+        self.memory.add_documents([doc_raw], source="YFinance")
         
         return {
             "messages": [HumanMessage(content=f"YFinance Agent finished research for {ticker}.")]

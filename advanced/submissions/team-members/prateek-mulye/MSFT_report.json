@@ -1,0 +1,38 @@
+{
+  "financial_data": {
+    "metrics": [
+      {
+        "Metric": "Market Cap",
+        "Value": "3.56T"
+      },
+      {
+        "Metric": "P/E Ratio",
+        "Value": "34.35"
+      },
+      {
+        "Metric": "Revenue Growth",
+        "Value": "+15%"
+      },
+      {
+        "Metric": "Profit Margin",
+        "Value": "25%"
+      }
+    ],
+    "chart": {
+      "type": "radar",
+      "title": "Financial Health Radar",
+      "data": {
+        "Valuation": 7,
+        "Growth": 6,
+        "Profitability": 8,
+        "Price Action": 5,
+        "Sentiment": 9
+      }
+    }
+  },
+  "verdict": {
+    "score": 75,
+    "recommendation": "Hold",
+    "reasoning": "While MSFT demonstrates a strong market presence and potential for significant upside, its current valuation premium suggests caution; holding the stock could be prudent until clearer growth indicators emerge."
+  }
+}

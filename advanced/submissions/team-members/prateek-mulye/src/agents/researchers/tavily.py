@@ -52,7 +52,7 @@ class TavilyAgent:
         # 2. Summarize & Sentiment with LLM
         raw_text = "\n\n".join([f"Source: {r.get('url', 'unknown')}\nContent: {r.get('content', '')}" for r in results])
         
-        system_prompt = """You are a Financial News Researcher.
+        system_prompt = """You are an Expert Financial News Researcher.
         Analyze the provided search results for {ticker}.
         
         Output a concise summary focusing on:

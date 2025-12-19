@@ -19,53 +19,82 @@ class ManagerAgent:
         self.llm = ChatOpenAI(model="gpt-4o-mini")
         self.memory = VectorMemory()
 
+    def _get_recency(self, ticker: str, data_type: str):
+        """Helper to check recency of a specific data type, picking the most recent version."""
+        filter_dict = {"ticker": ticker, "type": data_type}
+        # Fetch multiple to avoid picking up corrupt/old entries without timestamps
+        results = self.memory.similarity_search(f"{data_type} for {ticker}", k=5, filter=filter_dict)
+        
+        timestamps = []
+        for r in results:
+            ts = r.metadata.get("timestamp")
+            if ts is not None:
+                timestamps.append(float(ts))
+        
+        if timestamps:
+             max_ts = max(timestamps)
+             diff_mins = (time.time() - max_ts) / 60
+             return diff_mins
+        return None
+
     def run(self, state: AgentState):
         """
-        Analyzes the request, checks Pinecone cache, and determines the agents to run.
+        Orchestrates research by inventorying existing data and deciding which agents to run.
         """
         ticker = state.get("ticker")
         mode = state.get("investor_mode", "Neutral")
         
-        print(f"--- Manager Agent: Orchestrating for {ticker} ({mode}) ---")
+        print(f"--- Manager Agent: Competent Orchestration for {ticker} ---")
         
-        # Check Cache
-        query = f"Analyst Verdict for {ticker}"
-        results = self.memory.similarity_search(query, k=1)
+        # 1. Audit Cache Inventory
+        inventory = {
+            "final_verdict": self._get_recency(ticker, "final_verdict"),
+            "news_analysis": self._get_recency(ticker, "news_analysis"),
+            "financials": self._get_recency(ticker, "financials"),
+            "technicals": self._get_recency(ticker, "technicals")
+        }
         
-        cache_status = "No cache found."
-        recency_minutes = 99999
+        # Immediate shortcut: If full verdict is fresh (< 5 mins), skip all.
+        if inventory["final_verdict"] and inventory["final_verdict"] < 5:
+            print("Fresh final verdict found. Skipping all research.")
+            return {
+                "messages": [HumanMessage(content="Using fresh cached research.")],
+                "agents_to_run": []
+            }
+
+        # 2. Build Inventory Context for LLM
+        def format_status(mins):
+            if mins is None: return "MISSING"
+            if mins < 5: return f"FRESH ({mins:.1f}m old)"
+            if mins < 60: return f"STALE ({mins:.1f}m old)"
+            return f"EXPIRED ({mins/60:.1f}h old)"
+
+        audit_log = "\n".join([f"- {k}: {format_status(v)}" for k, v in inventory.items()])
+        print(f"Cache Inventory:\n{audit_log}")
         
-        if results:
-            doc = results[0]
-            timestamp = doc.metadata.get("timestamp", 0)
-            now = time.time()
-            diff = now - timestamp
-            recency_minutes = diff / 60
-            
-            if recency_minutes < 5:
-                cache_status = f"FRESH_CACHE_FOUND ({recency_minutes:.1f} mins ago)."
-            else:
-                cache_status = f"STALE_CACHE_FOUND ({recency_minutes:.1f} mins ago)."
+        # 3. Competent Decision Logic
+        system_prompt = """You are an Expert Research Manager.
+        Determine which researchers to activate for {ticker} based on the Cache Inventory.
         
-        print(f"Cache Status: {cache_status}")
+        Available Agents:
+        - 'tavily_researcher': Latest News & Sentiment.
+        - 'yfinance_researcher': Fundamentals (P/E, Growth, Dividends).
+        - 'tradingview_researcher': Technical Indicators (RSI, MACD).
         
-        # LLM Decision
-        system_prompt = """You are a Senior Research Manager.
-        Your goal is to orchestrate a financial research team for {ticker}.
-        User Mode: {mode}.
-        Cache Context: {cache_status}
+        Rules:
+        1. Only run an agent if its data is MISSING, STALE (> 5m), or EXPIRED.
+        2. If multiple data types are needed for a comprehensive analysis, enable all necessary agents.
+        3. Be efficient: Do not run agents for data that is already FRESH.
         
-        Decide which agents to run.
-        Available: ["tavily_researcher", "yfinance_researcher", "tradingview_researcher"]
+        Cache Inventory:
+        {audit_log}
         
-        Strategy:
-        1. If cache is FRESH (< 5 mins), return [] (empty list) to use existing data.
-        2. If cache is STALE or NO CACHE, run ALL agents.
+        User Tone/Mode: {mode}
         
         Output strictly JSON:
         {{
-            "plan": "Short strategic plan",
-            "agents_to_run": ["agent_name"]
+            "plan": "Short strategic explanation of why specific agents were chosen.",
+            "agents_to_run": ["agent_name1", "agent_name2"]
         }}
         """
         
@@ -75,16 +104,16 @@ class ManagerAgent:
         ])
         
         chain = prompt | self.llm
-        response = chain.invoke({"ticker": ticker, "mode": mode, "cache_status": cache_status})
+        response = chain.invoke({"ticker": ticker, "mode": mode, "audit_log": audit_log})
         
         try:
             content = response.content.replace("```json", "").replace("```", "").strip()
             decision = json.loads(content)
-            plan_text = decision.get("plan", "Proceeding with research.")
+            plan_text = decision.get("plan", "Proceeding with tailored research.")
             agents_to_run = decision.get("agents_to_run", [])
         except Exception as e:
             print(f"Error parsing Manager JSON: {e}")
-            plan_text = "Error parsing plan, defaulting to full run."
+            plan_text = "Error in decision logic, falling back to full run."
             agents_to_run = ["tavily_researcher", "yfinance_researcher", "tradingview_researcher"]
             
         print(f"Manager Decision: Run {agents_to_run}")

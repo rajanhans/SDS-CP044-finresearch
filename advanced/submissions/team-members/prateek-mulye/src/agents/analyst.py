@@ -24,9 +24,8 @@ class AnalystAgent:
         """
         Executes the analysis logic:
         1. Retrieve context from memory.
-        2. Synthesize and QC data.
-        3. Generate Verdict (Score/Rec).
-        4. Store result back to memory.
+        2. Synthesize, QC, and Score in a single LLM call for maximum performance.
+        3. Store result back to memory.
         """
         print("--- Analyst Agent (Aggregation & Scoring) ---")
         ticker = state.get("ticker")
@@ -43,62 +42,64 @@ class AnalystAgent:
         if not context_data:
             context_data = "No data available."
 
-        # 2. Aggregation & QC
-        qc_system_prompt = """You are a Lead Financial Analyst.
-        Review the gathered research data for {ticker}.
+        # 2. Unified Aggregation, QC, and Scoring
+        system_prompt = """You are an Expert Senior Lead Financial Analyst.
+        Review the gathered research data for {ticker} and the requested investor mode: {mode}.
         
-        Tasks:
-        1. Sanity Check: Are there conflicting price points or outdated data?
-        2. Aggregation: Synthesize the Fundamental, Technical, and Sentiment data into a coherent view.
-        """
+        Input Context:
+        - RAW JSON from 'YFinance' (Fundamentals) and 'TradingView' (Technicals).
+        - Unstructured text from 'Tavily' (News).
         
-        qc_prompt = ChatPromptTemplate.from_messages([
-            ("system", qc_system_prompt),
-            ("user", "Research Data:\n{data}")
-        ])
+        Your Goal: 
+        1. Sanity Check: Identify any conflicting data points.
+        2. Aggregation: Synthesize a coherent narrative.
+        3. Quantitative Verdict: Score the asset (0-100) and provide a recommendation.
         
-        qc_chain = qc_prompt | self.llm
-        aggregated_view = qc_chain.invoke({"ticker": ticker, "data": context_data}).content
-        
-        # 3. Scoring & Verdict
-        score_system_prompt = """You are a Quantitative Analyst.
-        Based on the Aggregated Research for {ticker} and the requested investor mode: {mode},
-        generate a final rating.
+        Execution:
+        Provide a concise 'Aggregated_View' narrative and a structured 'Verdict'.
         
         Output format must be strictly JSON:
         {{
-            "score": <0-100 integer>,
-            "recommendation": "<Buy|Sell|Hold>",
-            "reasoning": "<Concise 2-sentence explanation>"
+            "aggregated_view": "Coherent synthesis and sanity check results (2-3 paragraphs).",
+            "verdict": {{
+                "score": <0-100 integer>,
+                "recommendation": "<Buy|Sell|Hold>",
+                "reasoning": "<Concise 2-sentence explanation>"
+            }}
         }}
         """
         
-        score_prompt = ChatPromptTemplate.from_messages([
-            ("system", score_system_prompt),
-            ("user", "Aggregated Research:\n{view}")
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", "Research Data:\n{data}")
         ])
         
-        score_chain = score_prompt | self.llm
-        verdict = score_chain.invoke({"ticker": ticker, "mode": mode, "view": aggregated_view}).content
+        chain = prompt | self.llm
+        response = chain.invoke({"ticker": ticker, "mode": mode, "data": context_data}).content
         
-        # 4. Store Verdict
+        # Parse JSON output
+        verdict_data = {}
+        aggregated_view = "No aggregated view generated."
+        try:
+            clean_response = response.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(clean_response)
+            verdict_data = parsed.get("verdict", {})
+            aggregated_view = parsed.get("aggregated_view", "Analysis completed.")
+        except Exception as e:
+            print(f"Error parsing Analyst JSON: {e}")
+            # Fallback parsing
+            aggregated_view = response
+        
+        # 3. Store Verdict
         doc_verdict = Document(
-            page_content=f"Analyst Verdict:\n{verdict}\n\nAggregated View:\n{aggregated_view}",
+            page_content=f"Analyst Verdict:\n{json.dumps(verdict_data, indent=2)}\n\nAggregated View:\n{aggregated_view}",
             metadata={"source": "Analyst_Verdict", "ticker": ticker, "type": "final_verdict"}
         )
         self.memory.add_documents([doc_verdict], source="Analyst")
         
-        # Parse verdict logic
-        verdict_data = {}
-        try:
-            clean_verdict = verdict.replace("```json", "").replace("```", "").strip()
-            verdict_data = json.loads(clean_verdict)
-        except Exception as e:
-            print(f"Error parsing verdict JSON: {e}")
-        
         return {
             "analyst_verdict": verdict_data,
-            "messages": [HumanMessage(content=f"Analyst Verdict: {verdict}")]
+            "messages": [HumanMessage(content=f"Analyst Verdict: {json.dumps(verdict_data)}")]
         }
 
 def analyst_node(state: AgentState):
