@@ -44,6 +44,9 @@ class ManagerAgent:
         """
         Create and return the Manager agent.
         
+        Note: In hierarchical mode, CrewAI requires the manager to have no tools.
+        The manager delegates all tool usage to worker agents.
+        
         Returns:
             Configured Manager Agent instance
         """
@@ -58,8 +61,9 @@ class ManagerAgent:
             temperature=settings.manager_temperature
         )
         
-        # Manager only needs memory tool to coordinate
-        tools = [self._memory_tool]
+        # Manager should NOT have tools in hierarchical mode
+        # CrewAI requires manager_agent to be tool-free
+        tools = []
         
         self._agent = BaseAgentFactory.create_agent(
             agent_name=self.AGENT_NAME,
