@@ -5,10 +5,12 @@
 A production-grade, hierarchical multi-agent system for automated financial research, built with CrewAI. This implementation serves as the gold standard reference for the FinResearch AI project.
 
 **Key Features:**
+- 🌐 **Web Interface** - Modern React UI with real-time feedback
 - 🚀 **Parallel Execution** - Research and Analysis run simultaneously for faster results
-- 💬 **Interactive Mode** - Conversational interface with context persistence
+- 💬 **Interactive Mode** - CLI conversational interface with context persistence
 - 🧠 **Memory System** - ChromaDB-powered context sharing between agents
 - 📊 **Professional Reports** - Markdown reports with validation
+- 🐳 **Docker Ready** - Full-stack monolith deployment
 
 ---
 
@@ -16,36 +18,42 @@ A production-grade, hierarchical multi-agent system for automated financial rese
 
 ```
                               INPUT
-                    ┌─────────────────────┐
-                    │   CLI (main.py)     │
-                    │   Interactive Mode  │
-                    │   Config (.env)     │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                         ORCHESTRATION
-                    ┌─────────────────────┐
-                    │   FinResearchCrew   │
-                    │     (crew.py)       │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │   Manager Agent     │
-                    │   (Orchestrator)    │
-                    └──────────┬──────────┘
-                               │
-            ┌──────────────────┴──────────────────┐
-            │          PARALLEL EXECUTION         │
-            │                                     │
-            ▼                                     ▼
-     ┌─────────────┐                       ┌─────────────┐
-     │ Researcher  │     (async)           │  Analyst    │
-     │ Qualitative │◄────────────────────►│ Quantitative│
-     └──────┬──────┘                       └──────┬──────┘
-            │                                     │
-            │         ┌─────────────┐             │
-            └────────►│ ChromaDB    │◄────────────┘
+                    ┌─────────────────────────────┐
+                    │   Web UI (React + Vite)     │
+                    │   FastAPI REST Backend      │
+                    │   CLI (main.py)             │
+                    └────────────┬────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────────┐
+                    │   FastAPI (src/api.py)      │
+                    │   POST /api/research        │
+                    │   Async Thread Pool         │
+                    └────────────┬────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────────┐
+                    │   FinResearchCrew           │
+                    │     (crew.py)               │
+                    └────────────┬────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────────┐
+                    │   Manager Agent             │
+                    │   (Orchestrator)            │
+                    └────────────┬────────────────┘
+                                 │
+            ┌────────────────────┴────────────────────┐
+            │          PARALLEL EXECUTION            │
+            │                                        │
+            ▼                                        ▼
+     ┌─────────────┐                          ┌─────────────┐
+     │ Researcher  │     (async)              │  Analyst    │
+     │ Qualitative │◄───────────────────────►│ Quantitative│
+     └──────┬──────┘                          └──────┬──────┘
+            │                                        │
+            │         ┌─────────────┐                │
+            └────────►│ ChromaDB    │◄───────────────┘
                       │ (Memory)    │
                       └──────┬──────┘
                              │
@@ -70,15 +78,17 @@ A production-grade, hierarchical multi-agent system for automated financial rese
 ```
 yan-cotta/
 ├── main.py                 # CLI entry point
+├── run_dev.sh              # Development server script
 ├── verify_full_run.py      # End-to-end verification script
 ├── pyproject.toml          # Project metadata and dependencies
-├── Dockerfile              # Container configuration
+├── Dockerfile              # Full-stack container configuration
 ├── .dockerignore           # Docker build exclusions
 ├── .gitignore              # Git exclusions
 ├── README.md               # This documentation
 │
 ├── src/
 │   ├── __init__.py
+│   ├── api.py              # FastAPI REST backend
 │   ├── crew.py             # Crew orchestration logic
 │   │
 │   ├── config/
@@ -102,12 +112,121 @@ yan-cotta/
 │       ├── news_search.py      # DuckDuckGo wrapper
 │       └── memory.py           # ChromaDB memory tool
 │
+├── frontend/               # React Web Interface
+│   ├── package.json        # Node.js dependencies
+│   ├── vite.config.js      # Vite build configuration
+│   ├── tailwind.config.js  # Tailwind CSS configuration
+│   ├── index.html          # HTML entry point
+│   └── src/
+│       ├── main.jsx        # React entry point
+│       ├── App.jsx         # Main application component
+│       └── index.css       # Tailwind CSS styles
+│
 ├── outputs/                # Generated reports (gitignored)
 │   └── .gitkeep
 │
 └── tests/
     ├── __init__.py
     └── test_financial_tool.py  # Tool unit tests
+```
+
+---
+
+## Quick Start
+
+### Option 1: Web Interface (Recommended)
+
+```bash
+# Navigate to project
+cd advanced/submissions/team-members/yan-cotta
+
+# Install Python dependencies
+pip install -e .
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Start development servers
+./run_dev.sh
+```
+
+Open http://localhost:5173 in your browser.
+
+### Option 2: Docker (Production)
+
+```bash
+# Build the full-stack image
+docker build -t finresearch-ai:latest .
+
+# Run web server
+docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... finresearch-ai:latest
+
+# Run CLI mode
+docker run -e OPENAI_API_KEY=sk-... finresearch-ai:latest cli AAPL --sequential
+```
+
+### Option 3: CLI Only
+
+```bash
+# Research a stock
+python main.py AAPL --sequential
+
+# Interactive mode
+python main.py -i
+```
+
+---
+
+## Web Interface
+
+### Features
+
+The React web interface provides:
+
+- **Ticker Input** - Enter any stock symbol (AAPL, TSLA, etc.)
+- **Quick Select** - Popular ticker buttons for fast access
+- **Settings Panel**
+  - Reset Memory toggle (clear previous context)
+  - Model Provider selection (OpenAI/Groq)
+- **Real-time Progress** - Agent activity visualization
+- **Report Viewer** - Rendered markdown with syntax highlighting
+- **Download** - Save reports as markdown files
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/research` | POST | Execute research (sync) |
+| `/api/research/async` | POST | Start research (async) |
+| `/api/status/{task_id}` | GET | Poll async task status |
+| `/api/health` | GET | Health check |
+| `/api/memory` | DELETE | Clear ChromaDB memory |
+| `/api/docs` | GET | Swagger documentation |
+
+### Request Example
+
+```json
+POST /api/research
+{
+  "ticker": "AAPL",
+  "company_name": "Apple Inc",
+  "reset_memory": false,
+  "model_provider": "openai",
+  "sequential_mode": true
+}
+```
+
+### Response Example
+
+```json
+{
+  "success": true,
+  "ticker": "AAPL",
+  "report": "# Financial Research Report: AAPL\n\n## Executive Summary...",
+  "logs": ["Starting research...", "Executing agent workflow...", "Research completed!"],
+  "duration_seconds": 42.5,
+  "error": null
+}
 ```
 
 ---
@@ -134,17 +253,18 @@ yan-cotta/
 
 | Agent | Role | Temperature | Tools |
 |-------|------|-------------|-------|
-| Manager | Orchestration and delegation | 0.1 | Memory |
+| Manager | Orchestration and delegation | 0.1 | None (hierarchical) |
 | Researcher | Qualitative analysis | 0.7 | News, Memory |
 | Analyst | Quantitative analysis | 0.0 | Financial, Memory |
 | Reporter | Report synthesis | 0.5 | Memory |
 
-### Crew Orchestration (`src/crew.py`)
+### API Backend (`src/api.py`)
 
-Provides two execution modes:
-
-- `FinResearchCrew`: Hierarchical process with Manager delegation
-- `SequentialFinResearchCrew`: Linear task execution (for debugging)
+FastAPI-based REST backend with:
+- Thread pool executor for async CrewAI execution
+- CORS middleware for frontend development
+- Static file serving for production deployment
+- Pydantic models for request/response validation
 
 ---
 
@@ -152,14 +272,13 @@ Provides two execution modes:
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11+
+- Node.js 18+ (for frontend)
 - OpenAI API key
-- Virtual environment (recommended)
 
-### Installation
+### Backend Installation
 
 ```bash
-# Navigate to this directory
 cd advanced/submissions/team-members/yan-cotta
 
 # Create virtual environment
@@ -169,6 +288,13 @@ source venv/bin/activate  # Linux/Mac
 
 # Install dependencies
 pip install -e .
+```
+
+### Frontend Installation
+
+```bash
+cd frontend
+npm install
 ```
 
 ### Configuration
@@ -183,12 +309,53 @@ OPENAI_API_KEY=sk-your-openai-api-key
 FINRESEARCH_MANAGER_MODEL=gpt-4o-mini
 FINRESEARCH_WORKER_MODEL=gpt-3.5-turbo
 FINRESEARCH_LOG_LEVEL=INFO
-FINRESEARCH_OUTPUT_DIR=./reports
+FINRESEARCH_OUTPUT_DIR=./outputs
 ```
 
 ---
 
-## Usage
+## Development
+
+### Running Development Servers
+
+```bash
+# Option 1: Use the dev script
+./run_dev.sh
+
+# Option 2: Run separately
+# Terminal 1 - Backend
+uvicorn src.api:app --reload --port 8000
+
+# Terminal 2 - Frontend
+cd frontend && npm run dev
+```
+
+### Building for Production
+
+```bash
+# Build frontend
+cd frontend && npm run build && cd ..
+
+# The built files are in frontend/dist/
+# FastAPI will serve them automatically
+```
+
+### Docker Build
+
+```bash
+# Build full-stack image
+docker build -t finresearch-ai:latest .
+
+# Run container
+docker run -p 8000:8000 \
+  -e OPENAI_API_KEY=sk-... \
+  -v $(pwd)/outputs:/app/outputs \
+  finresearch-ai:latest
+```
+
+---
+
+## CLI Usage
 
 ### Command Line Interface
 
@@ -209,31 +376,7 @@ python main.py GOOGL --output google_research.md
 python main.py NVDA --verbose
 ```
 
-### CLI Options
-
-```
-positional arguments:
-  ticker                Stock ticker symbol (e.g., AAPL, TSLA)
-
-optional arguments:
-  -i, --interactive     Start interactive conversational mode
-  -n, --name            Company name (defaults to ticker)
-  -o, --output          Output filename for report
-  -s, --sequential      Use sequential instead of hierarchical process
-  -v, --verbose         Enable verbose agent output
-  -q, --quiet           Suppress banner and progress
-  --log-level           Logging level (DEBUG/INFO/WARNING/ERROR)
-  --log-file            Log to file instead of stdout
-  --dry-run             Validate config without running
-  --reset-memory        Clear ChromaDB before starting
-  --json-output         Output result as JSON (for UI integration)
-```
-
----
-
-## Interactive Mode
-
-Start the conversational interface for multi-query research sessions:
+### Interactive Mode
 
 ```bash
 # Start interactive mode
@@ -242,229 +385,13 @@ python main.py --interactive
 python main.py -i
 ```
 
-### Interactive Commands
-
-| Command | Description |
-|---------|-------------|
-| `AAPL` | Research a ticker |
-| `research TSLA` | Research Tesla |
-| `analyze MSFT` | Analyze Microsoft |
-| `context` | Show context for current ticker |
-| `context AAPL` | Show context for specific ticker |
-| `status` | Show session summary |
-| `clear` | Start fresh session |
-| `help` | Show all commands |
-| `exit` / `quit` | Exit interactive mode |
-
-### Follow-up Queries
-
-When you have an active ticker, you can ask follow-up questions:
-
-```
-finresearch[AAPL]> more details
-finresearch[AAPL]> what about risks
-finresearch[AAPL]> research TSLA    # Switch to new ticker
-```
-
-### Context Persistence
-
-Interactive mode uses ChromaDB to maintain context:
-- Previous research findings are stored
-- Follow-up queries can access prior context
-- Session history tracks all queries
-
----
-
-## Parallel Execution
-
-Research and Analysis tasks run simultaneously for improved performance:
-
-```yaml
-# tasks.yaml configuration
-research_task:
-  async_execution: true  # Run in parallel
-
-analysis_task:
-  async_execution: true  # Run in parallel
-
-report_task:
-  # Waits for both via context dependency
-```
-
-**Benefits:**
-- ~40% faster execution for typical queries
-- Researcher and Analyst work independently
-- Reporter synthesizes both results when ready
-
-### Python API
-
-```python
-from src.crew import FinResearchCrew
-
-# Create and run crew
-crew = FinResearchCrew(
-    ticker="AAPL",
-    company_name="Apple Inc",
-    verbose=True
-)
-
-# Execute research
-report = crew.run()
-
-# Save report
-path = crew.save_report(report)
-print(f"Report saved to: {path}")
-```
-
-### Docker
-
-```bash
-# Build image
-docker build -t finresearch-advanced .
-
-# Run research
-docker run -e OPENAI_API_KEY=sk-... finresearch-advanced AAPL
-```
-
----
-
-## Workflow
-
-```
-User                Manager             Researcher          Analyst             Reporter            Memory
- │                     │                    │                   │                   │                  │
- │  Research AAPL      │                    │                   │                   │                  │
- │────────────────────>│                    │                   │                   │                  │
- │                     │                    │                   │                   │                  │
- │                     │  Find news         │                   │                   │                  │
- │                     │───────────────────>│                   │                   │                  │
- │                     │                    │                   │                   │                  │
- │                     │                    │  Save findings    │                   │                  │
- │                     │                    │─────────────────────────────────────────────────────────>│
- │                     │                    │                   │                   │                  │
- │                     │  Research done     │                   │                   │                  │
- │                     │<───────────────────│                   │                   │                  │
- │                     │                    │                   │                   │                  │
- │                     │  Get financials    │                   │                   │                  │
- │                     │──────────────────────────────────────>│                   │                  │
- │                     │                    │                   │                   │                  │
- │                     │                    │                   │  Save metrics     │                  │
- │                     │                    │                   │──────────────────────────────────────>│
- │                     │                    │                   │                   │                  │
- │                     │  Analysis done     │                   │                   │                  │
- │                     │<──────────────────────────────────────│                   │                  │
- │                     │                    │                   │                   │                  │
- │                     │  Create report     │                   │                   │                  │
- │                     │─────────────────────────────────────────────────────────>│                  │
- │                     │                    │                   │                   │                  │
- │                     │                    │                   │                   │  Get all data    │
- │                     │                    │                   │                   │─────────────────>│
- │                     │                    │                   │                   │                  │
- │                     │  Report ready      │                   │                   │                  │
- │                     │<─────────────────────────────────────────────────────────│                  │
- │                     │                    │                   │                   │                  │
- │  Final report       │                    │                   │                   │                  │
- │<────────────────────│                    │                   │                   │                  │
- │                     │                    │                   │                   │                  │
-```
-
----
-
-## Output Example
-
-Reports are saved to `./outputs/` with the format:
-
-```
-AAPL_report.md
-```
-
-Sample report structure:
-
-```markdown
-# Investment Research Report: Apple Inc (AAPL)
-
-**Generated:** 2024-12-17 14:30:52
-
----
-
-## Executive Summary
-...
-
-## Market Data & Financial Metrics
-...
-
-## News Analysis & Recent Developments
-...
-
-## Risk Assessment
-...
-
----
-
-## Disclaimer
-*This report is for informational purposes only...*
-```
-
----
-
-## Verification Script
-
-Run the end-to-end verification to test the complete workflow:
-
-```bash
-# Run full verification for NVDA
-python verify_full_run.py
-
-# Test with custom ticker
-python verify_full_run.py --ticker AAPL
-
-# Dry run (validate setup only)
-python verify_full_run.py --dry-run
-
-# Test interactive mode components
-python verify_full_run.py --test-interactive
-
-# Verbose output
-python verify_full_run.py -v
-```
-
-The verification script checks:
-
-1. All imports resolve correctly
-2. Configuration files are valid
-3. Environment variables are set
-4. ChromaDB memory tool works
-5. All agents can be created
-6. Output directory is writable
-7. Parallel execution is configured
-8. Interactive mode query parsing works
-9. Conversation context management works
-10. Crew executes successfully
-11. Report is generated with required sections
-
----
-
-## Design Decisions
-
-### Why Hierarchical Process?
-
-The Manager agent coordinates work, ensuring:
-
-- Proper task sequencing
-- Quality control before final output
-- Efficient delegation to specialists
-
-### Why Separate Tools per Agent?
-
-- **Prevents hallucination**: Analyst cannot fabricate news articles
-- **Clear responsibilities**: Each agent has focused expertise
-- **Easier debugging**: Issues are isolated to specific agents
-
-### Why ChromaDB Memory?
-
-- Enables agent collaboration without direct communication
-- Persists context across task boundaries
-- Supports semantic retrieval for relevant information
+Interactive commands:
+- `AAPL` - Research a ticker
+- `context AAPL` - Show previous context
+- `status` - Session summary
+- `clear` - Reset session
+- `help` - Show commands
+- `exit` - Quit
 
 ---
 
@@ -477,8 +404,11 @@ pytest tests/
 # Run with coverage
 pytest tests/ --cov=src --cov-report=html
 
-# Run specific test
-pytest tests/test_financial_tool.py -v
+# Run verification script
+python verify_full_run.py --dry-run
+
+# Test with specific ticker
+python verify_full_run.py --ticker AAPL
 ```
 
 ---
@@ -489,17 +419,25 @@ pytest tests/test_financial_tool.py -v
 
 Ensure your `.env` file is in the project root and contains a valid key.
 
-### No data found for ticker
+### Frontend not loading
 
-Verify the ticker symbol is valid on Yahoo Finance.
+1. Check that `npm install` was run in `frontend/`
+2. Verify Vite dev server is running on port 5173
+3. Check browser console for CORS errors
 
-### ChromaDB not installed
+### API returning 500 errors
 
-Run: `pip install chromadb`
+Check the FastAPI logs for detailed error messages:
+```bash
+uvicorn src.api:app --reload --log-level debug
+```
 
 ### Agent seems stuck
 
-Use `--sequential` mode for simpler execution and easier debugging.
+Use sequential mode for simpler execution:
+```bash
+python main.py AAPL --sequential
+```
 
 ---
 
