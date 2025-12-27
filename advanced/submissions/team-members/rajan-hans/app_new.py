@@ -20,7 +20,7 @@ from charts import (
     create_score_gauges_row,
     create_sector_comparison_chart,
     create_final_score_display,
-    create_technical_chart,
+    create_technical_chart
 )
 from tradingview_widgets import (
     render_advanced_chart,
@@ -32,30 +32,94 @@ from tradingview_widgets import (
 )
 
 
+def get_secret(key: str, default: str = None) -> str:
+    """
+    Get a secret/environment variable from multiple sources.
+    
+    Priority order:
+    1. os.environ (includes .env via load_dotenv)
+    2. st.secrets (Streamlit Cloud secrets.toml)
+    3. default value
+    
+    Args:
+        key: The environment variable name
+        default: Default value if not found anywhere
+    
+    Returns:
+        The secret value or default
+    """
+    # First try os.environ (includes .env file)
+    value = os.environ.get(key)
+    if value:
+        return value
+    
+    # Then try Streamlit secrets
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            # Also set in os.environ so other modules can access it
+            value = st.secrets[key]
+            os.environ[key] = value
+            return value
+    except Exception:
+        # st.secrets may not be available in all contexts
+        pass
+    
+    return default
+
+
+def load_secrets_to_environ():
+    """
+    Load all Streamlit secrets into os.environ.
+    This ensures compatibility with modules that use os.getenv().
+    
+    Call this once at startup after load_dotenv().
+    """
+    try:
+        if hasattr(st, 'secrets'):
+            for key in st.secrets:
+                # Only set if not already in environ (don't override .env)
+                if key not in os.environ:
+                    os.environ[key] = str(st.secrets[key])
+    except Exception:
+        # st.secrets may not be available
+        pass
+
+
+# Load Streamlit secrets into environment (for Streamlit Cloud)
+load_secrets_to_environ()
+
+
 def validate_environment():
     """
     Validate required and optional environment variables at startup.
+    Checks both .env file and Streamlit secrets.
     Shows warnings/errors in Streamlit UI.
     """
     # Required API keys
     required_keys = ["OPENAI_API_KEY"]
-    missing_required = [k for k in required_keys if not os.getenv(k)]
+    missing_required = [k for k in required_keys if not get_secret(k)]
 
     if missing_required:
         st.error(
-            f"Missing required API keys: {', '.join(missing_required)}\n\n"
-            "Please set these in your `.env` file or environment variables."
+            f"⚠️ Missing required API keys: **{', '.join(missing_required)}**\n\n"
+            "Please set these in one of the following locations:\n"
+            "- **Local development**: `.env` file in project root\n"
+            "- **Streamlit Cloud**: Settings → Secrets (TOML format)\n\n"
+            "Example secrets.toml format:\n"
+            "```toml\n"
+            'OPENAI_API_KEY = "sk-your-key-here"\n'
+            "```"
         )
         st.stop()
 
     # Optional API keys (for news search)
     optional_keys = ["TAVILY_API_KEY", "SERPAPI_API_KEY"]
-    missing_optional = [k for k in optional_keys if not os.getenv(k)]
+    missing_optional = [k for k in optional_keys if not get_secret(k)]
 
     if missing_optional:
         st.sidebar.warning(
-            f"Missing optional keys: {', '.join(missing_optional)}\n"
-            "News search may not work."
+            f"Optional keys not configured: {', '.join(missing_optional)}\n\n"
+            "News search will use free sources only."
         )
 
 
@@ -115,55 +179,46 @@ def render_glossary():
 
 def render_scoring_methodology():
     """Render the scoring methodology page."""
-
+    
     st.markdown("### 📊 Scoring Methodology")
     st.markdown("---")
-
-    st.markdown(
-        """
+    
+    st.markdown("""
     The investment scores are calculated using **deterministic rules** based on financial data.
     No AI/LLM is involved in the score calculations - only in report generation.
-    """
-    )
-
+    """)
+    
     # The 5 Factor Scores
     st.subheader("The 5 Factor Scores")
-
+    
     factor_scores_data = {
-        "Factor": [
-            "Valuation",
-            "Growth",
-            "Profitability",
-            "Financial Health",
-            "Technical",
-        ],
+        "Factor": ["Valuation", "Growth", "Profitability", "Financial Health", "Technical"],
         "Weight": ["25%", "25%", "15%", "15%", "20%"],
         "Key Metrics": [
             "P/E ratio, PEG ratio, sector comparison",
             "Revenue CAGR (3Y), EPS CAGR (3Y)",
             "ROE, Operating Margin",
             "Debt/Equity, Interest Coverage",
-            "RSI, Trend label, Max Drawdown",
+            "RSI, Trend label, Max Drawdown"
         ],
         "Data Source": [
             "Yahoo Finance (.info)",
             "Financial Statements",
             "Financial Statements",
             "Balance Sheet",
-            "Price History",
-        ],
+            "Price History"
+        ]
     }
-
+    
     st.table(factor_scores_data)
-
+    
     st.markdown("---")
-
+    
     # Detailed Score Breakdowns
     st.subheader("Score Calculation Details")
-
+    
     with st.expander("📈 Valuation Score (25% weight)", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **Base Score from P/E Ratio:**
 | P/E Range | Score | Interpretation |
 |-----------|-------|----------------|
@@ -185,12 +240,10 @@ def render_scoring_methodology():
 - PEG 1.0-1.5: +5 points
 - PEG 2.0-2.5: -5 points
 - PEG > 2.5: -10 points
-        """
-        )
-
+        """)
+    
     with st.expander("📊 Growth Score (25% weight)", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **Revenue CAGR (3-Year):**
 | Revenue CAGR | Score |
 |--------------|-------|
@@ -212,12 +265,10 @@ def render_scoring_methodology():
 **Growth Score** = (Revenue Score + EPS Score) / 2
 
 **Acceleration Bonus:** +5 if YoY growth > 3Y CAGR, -5 if decelerating
-        """
-        )
-
+        """)
+    
     with st.expander("💰 Profitability Score (15% weight)", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **ROE (Return on Equity):**
 | ROE | Score |
 |-----|-------|
@@ -237,12 +288,10 @@ def render_scoring_methodology():
 | < 0% (loss) | 20 |
 
 **Profitability Score** = (ROE Score + Margin Score) / 2
-        """
-        )
-
+        """)
+    
     with st.expander("🏦 Financial Health Score (15% weight)", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **Debt/Equity Ratio** (lower is better):
 | Debt/Equity | Score |
 |-------------|-------|
@@ -262,12 +311,10 @@ def render_scoring_methodology():
 | < 1x | 15 |
 
 **Health Score** = (D/E Score + Interest Coverage Score) / 2
-        """
-        )
-
+        """)
+    
     with st.expander("📉 Technical Score (20% weight)", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **RSI (14-day):**
 | RSI Range | Score | Interpretation |
 |-----------|-------|----------------|
@@ -293,28 +340,24 @@ def render_scoring_methodology():
 | > 35% | 25 |
 
 **Technical Score** = (RSI Score + Trend Score + Drawdown Score) / 3
-        """
-        )
-
+        """)
+    
     st.markdown("---")
-
+    
     # Final Score Formula
     st.subheader("Final Score Formula")
-
-    st.code(
-        """
+    
+    st.code("""
 Final Score = (0.25 × Valuation) + (0.25 × Growth) + (0.15 × Profitability) 
             + (0.15 × Financial Health) + (0.20 × Technical) 
             + Sentiment Adjustment (-5 to +5)
-    """,
-        language="text",
-    )
-
+    """, language="text")
+    
     st.markdown("---")
-
+    
     # Rating Thresholds
     st.subheader("Rating Thresholds")
-
+    
     rating_data = {
         "Score Range": ["80-100", "65-79", "45-64", "30-44", "0-29"],
         "Rating": ["STRONG BUY", "BUY", "HOLD", "REDUCE", "SELL"],
@@ -323,20 +366,19 @@ Final Score = (0.25 × Valuation) + (0.25 × Growth) + (0.15 × Profitability)
             "Good investment with favorable risk/reward",
             "Fairly valued, wait for better entry or hold existing position",
             "Consider reducing position, unfavorable risk/reward",
-            "Significant concerns, consider exiting position",
-        ],
+            "Significant concerns, consider exiting position"
+        ]
     }
-
+    
     st.table(rating_data)
-
+    
     st.markdown("---")
-
+    
     # Example Calculation
     st.subheader("Example Calculation")
-
+    
     with st.expander("📝 See Example Score Calculation", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 **Example Stock Data:**
 - P/E = 18, Sector P/E = 25, PEG = 1.2
 - Revenue CAGR = 15%, EPS CAGR = 20%
@@ -358,8 +400,7 @@ Final = 0.25×78 + 0.25×80 + 0.15×80 + 0.15×80 + 0.20×78.3
 ```
 
 **Result:** Score of 79.16 → **Rating: "BUY"**
-        """
-        )
+        """)
 
 
 # --------------------------------
@@ -623,57 +664,57 @@ if st.session_state.research_result:
     # Tab 2: Charts
     with tabs[1]:
         st.subheader("📊 Visual Analysis")
-
+        
         # Get data for charts
         scores = result.get("scores", {})
         analyst_data = result.get("analyst", {})
-
+        
         # If scores not at top level, try to get from analyst data
         if not scores and analyst_data:
             scores = analyst_data.get("scores", {})
-
+        
         # Determine color theme based on Streamlit theme (default to light)
         tv_theme = "light"  # Change to "dark" if you add dark mode support
-
+        
         # Get full symbol with exchange prefix for TradingView
         tv_symbol = get_exchange_prefix(ticker, detect_exchange(ticker))
-
+        
         # =================================================================
         # TRADINGVIEW SECTION: Live Charts
         # =================================================================
         st.markdown("### 📈 Live Market Data")
-
+        
         # Symbol Overview - Shows live price with mini chart
         try:
             render_symbol_overview(ticker, height=180, color_theme=tv_theme)
         except Exception as e:
             st.warning(f"Could not load TradingView symbol overview: {e}")
-
+        
         st.markdown("---")
-
+        
         # Two-column layout: Advanced Chart + Technical Analysis
         tv_col1, tv_col2 = st.columns([2, 1])
-
+        
         with tv_col1:
             st.markdown("### Interactive Price Chart")
-
+            
             # Chart interval selector
             chart_interval = st.selectbox(
                 "Select Timeframe",
                 options=["1", "5", "15", "60", "D", "W", "M"],
                 format_func=lambda x: {
-                    "1": "1 Minute",
-                    "5": "5 Minutes",
+                    "1": "1 Minute", 
+                    "5": "5 Minutes", 
                     "15": "15 Minutes",
-                    "60": "1 Hour",
-                    "D": "Daily",
-                    "W": "Weekly",
-                    "M": "Monthly",
+                    "60": "1 Hour", 
+                    "D": "Daily", 
+                    "W": "Weekly", 
+                    "M": "Monthly"
                 }.get(x, x),
                 index=4,  # Default to Daily
-                key="tv_chart_interval",
+                key="tv_chart_interval"
             )
-
+            
             try:
                 render_advanced_chart(
                     symbol=ticker,
@@ -682,14 +723,14 @@ if st.session_state.research_result:
                     color_theme=tv_theme,
                     studies=[
                         "MASimple@tv-basicstudies",  # Moving Average
-                        "RSI@tv-basicstudies",  # RSI indicator
+                        "RSI@tv-basicstudies",       # RSI indicator
                     ],
                 )
             except Exception as e:
                 st.warning(f"Could not load TradingView chart: {e}")
                 # Fallback message
                 st.info("📊 TradingView chart requires internet connection.")
-
+        
         with tv_col2:
             st.markdown("### Technical Analysis")
             st.caption("TradingView's Buy/Sell Gauge")
@@ -702,111 +743,102 @@ if st.session_state.research_result:
                 )
             except Exception as e:
                 st.warning(f"Could not load TradingView technical analysis: {e}")
-
+        
         st.markdown("---")
-
+        
         # =================================================================
         # OUR SCORES SECTION: Proprietary Analysis
         # =================================================================
-        st.markdown("### 🎯 FinAI APP Investment Scores")
-        st.caption(
-            "Our proprietary scoring based on fundamentals, technicals, and sector comparison"
-        )
-
+        st.markdown("### 🎯 FinAI Investment Scores")
+        st.caption("Our proprietary scoring based on fundamentals, technicals, and sector comparison")
+        
         # Final Score Display
         final_score = result.get("final_score") or scores.get("final_score", 50)
         rating = result.get("rating_5_tier") or scores.get("rating", "HOLD")
         confidence = result.get("confidence", "MEDIUM")
-
+        
         if final_score:
             try:
                 fig_final = create_final_score_display(final_score, rating, confidence)
-                st.plotly_chart(fig_final, width="stretch")
+                st.plotly_chart(fig_final, width='stretch')
             except Exception as e:
                 st.warning(f"Could not render final score chart: {e}")
-
+        
         st.markdown("---")
-
+        
         # Score Gauges Row
         if scores:
             st.markdown("### Factor Score Breakdown")
             try:
                 fig_gauges = create_score_gauges_row(scores)
-                st.plotly_chart(fig_gauges, width="stretch")
+                st.plotly_chart(fig_gauges, width='stretch')
             except Exception as e:
                 st.warning(f"Could not render gauge charts: {e}")
-
+            
             st.markdown("---")
-
+            
             # Radar Chart
             st.markdown("### Factor Score Radar")
             try:
                 fig_radar = create_score_radar_chart(scores, ticker)
-                st.plotly_chart(fig_radar, width="stretch")
+                st.plotly_chart(fig_radar, width='stretch')
             except Exception as e:
                 st.warning(f"Could not render radar chart: {e}")
         else:
             st.info("Score data not available for charts.")
-
+        
         st.markdown("---")
-
+        
         # Technical Indicators Chart (our calculations)
         technical_indicators = result.get("technical_indicators", {})
         if not technical_indicators and analyst_data:
             technical_indicators = analyst_data.get("technical_indicators", {})
-
+        
         if technical_indicators:
             st.markdown("### Our Technical Indicators")
             st.caption("Calculated from historical price data")
             try:
                 fig_tech = create_technical_chart(technical_indicators, ticker)
-                st.plotly_chart(fig_tech, width="stretch")
+                st.plotly_chart(fig_tech, width='stretch')
             except Exception as e:
                 st.warning(f"Could not render technical chart: {e}")
-
+        
         st.markdown("---")
-
+        
         # Sector Comparison Chart
         sector = result.get("sector", "Technology")
         sector_benchmarks = result.get("sector_benchmarks", {})
         fundamental_metrics = result.get("fundamental_metrics", {})
-
+        
         if not sector_benchmarks and analyst_data:
             sector_benchmarks = analyst_data.get("sector_benchmarks", {})
         if not fundamental_metrics and analyst_data:
             fundamental_metrics = analyst_data.get("fundamental_metrics", {})
-
+        
         # Merge valuation data for comparison
         stock_metrics = {}
         if fundamental_metrics:
             stock_metrics.update(fundamental_metrics.get("profitability", {}))
             stock_metrics.update(fundamental_metrics.get("valuation", {}))
-
+        
         # Add PE from scores if available
         if scores:
-            stock_metrics["pe_ttm"] = scores.get("pe_ttm") or fundamental_metrics.get(
-                "pe_ttm"
-            )
-            stock_metrics["peg_ratio"] = scores.get(
-                "peg_ratio"
-            ) or fundamental_metrics.get("peg_ratio")
-
+            stock_metrics["pe_ttm"] = scores.get("pe_ttm") or fundamental_metrics.get("pe_ttm")
+            stock_metrics["peg_ratio"] = scores.get("peg_ratio") or fundamental_metrics.get("peg_ratio")
+        
         if stock_metrics and sector_benchmarks:
             st.markdown(f"### {ticker} vs {sector} Sector")
             try:
                 # Get valuation benchmarks
                 valuation_benchmarks = sector_benchmarks.get("valuation", {})
                 profitability_benchmarks = sector_benchmarks.get("profitability", {})
-                combined_benchmarks = {
-                    **valuation_benchmarks,
-                    **profitability_benchmarks,
-                }
-
+                combined_benchmarks = {**valuation_benchmarks, **profitability_benchmarks}
+                
                 fig_sector = create_sector_comparison_chart(
                     stock_metrics, combined_benchmarks, ticker, sector
                 )
                 if fig_sector:
-                    st.plotly_chart(fig_sector, width="stretch")
+                    st.plotly_chart(fig_sector, width='stretch')
             except Exception as e:
                 st.warning(f"Could not render sector comparison chart: {e}")
 
